@@ -1,0 +1,41 @@
+{
+  "name": "chatgpt-project-bridge",
+  "version": "0.1.0",
+  "description": "Use a ChatGPT Web Project as an OpenCode model backend. ChatGPT reasons; OpenCode executes.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "cgpt": "dist/cli/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:e2e": "vitest run test/e2e",
+    "proof": "node scripts/proof-all.mjs"
+  },
+  "keywords": [
+    "opencode",
+    "chatgpt",
+    "bridge",
+    "provider"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "fastify": "^5.2.1",
+    "jsonc-parser": "^3.3.1",
+    "playwright-core": "^1.53.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}

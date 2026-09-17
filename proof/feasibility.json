@@ -1,0 +1,75 @@
+{
+  "gates": {
+    "G07": {
+      "status": "PASS",
+      "evidence": [
+        "PASS non-stream: status=200 content=\"hello from the bridge\"",
+        "PASS stream: status=200 sse=true assembled=\"hello from the bridge\"",
+        "PASS invalid-auth: status=401",
+        "PASS unknown-model: status=404",
+        "PASS malformed-request: status=400",
+        "PASS models-auth: status=401",
+        "PASS health: status=200"
+      ],
+      "command": "node scripts/g07-raw-provider.mjs"
+    },
+    "G15": {
+      "status": "PASS",
+      "evidence": [
+        "PASS repair-once-succeeds: content=recovered-after-repair",
+        "PASS repair-sent-to-same-conversation: sends=2 starts=1",
+        "PASS repair-instruction-content: Your previous response violated the bridge transport schema.\nReturn the same int",
+        "PASS hard-failure-after-second-violation: ChatGPT returned an invalid bridge response twice. No tool call was executed. Detail: No JSON object found in the respon",
+        "PASS no-infinite-loop: sends=2 (must be exactly 2)",
+        "PASS unknown-tool-fails-closed: ChatGPT returned an invalid bridge response twice. No tool call was executed. Detail: Unknown tool \"definitely_not_a_too"
+      ],
+      "command": "node scripts/g15-malformed.mjs"
+    },
+    "G16": {
+      "status": "PASS",
+      "evidence": [
+        "PASS no-composer-on-foreign-page: composer visible=false on https://example.com/",
+        "PASS unresumable-conversation-resyncs: starts=2 content=after-resync",
+        "PASS send-failure-actionable: simulated browser crash",
+        "PASS project-unverifiable-fails-closed: Configured ChatGPT Project could not be verified. No prompt was submitted. Detail: composer missing on project page",
+        "PASS no-prompts-when-project-unverified: sends=0"
+      ],
+      "command": "node scripts/g16-ui-failure.mjs"
+    },
+    "G01": {
+      "status": "PASS",
+      "evidence": [
+        "PASS node >= 22: v24.20.0",
+        "PASS npm: 11.19.0",
+        "PASS opencode: 1.18.31",
+        "PASS browser: /Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "PASS typescript: Version 5.9.3",
+        "PASS vitest: vitest/3.2.7 darwin-arm64 node-v24.20.0",
+        "PASS git: git version 2.55.0"
+      ],
+      "command": "node scripts/g01-environment.mjs"
+    },
+    "G14": {
+      "status": "PASS",
+      "note": "Restart simulated with fresh backend instances + persisted session state. Real-daemon restart covered by same code path (atomic state files).",
+      "evidence": [
+        "PASS first-turn-completed: sends=1",
+        "PASS no-new-conversation-after-restart: starts=0 (must be 0 — conversation resumed from disk)",
+        "PASS same-conversation-resumed: content=turn-two-answer",
+        "PASS conversation-history-continued: transcript entries=4 (2 from before restart + 2 new)",
+        "PASS delta-only-send-after-restart: resend contained full history: false"
+      ],
+      "command": "node scripts/g14-restart.mjs"
+    }
+  },
+  "timestamp": "2026-09-17T23:26:21.140Z",
+  "environment": {
+    "node": "v24.20.0",
+    "npm": "11.19.0",
+    "opencode": "1.18.31",
+    "git": "git version 2.55.0",
+    "os": "darwin arm64",
+    "browser": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+  },
+  "overall": "PASS"
+}
