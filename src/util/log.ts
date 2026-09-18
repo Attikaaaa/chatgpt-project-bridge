@@ -47,7 +47,16 @@ class Logger extends EventEmitter {
   /** Debug logging of prompt bodies requires the explicit unsafe flag. */
   body(msg: string, fields?: LogFields) {
     if (!this.verboseBodies) return
-    this.write("debug", msg, fields)
+    // Explicitly requested unsafe debug: bypass the level gate.
+    const entry = {
+      ts: new Date().toISOString(),
+      level: "debug" as const,
+      run: this.runId,
+      msg,
+      ...fields,
+    }
+    process.stderr.write(JSON.stringify(entry) + "\n")
+    this.emit("entry", entry)
   }
 }
 

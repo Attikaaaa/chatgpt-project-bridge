@@ -3,17 +3,32 @@ import { SELECTORS } from "./selectors.js"
 import { CodedError } from "./backend.js"
 import { log } from "../util/log.js"
 
-export function composerLocator(page: Page): Locator {
-  return page.locator(SELECTORS.promptComposer).first()
+/**
+ * The page can contain several composer-like elements (a hidden 0x0
+ * textarea mirror plus the real contenteditable). Pick the first VISIBLE
+ * candidate, preferring known test-ids/ids over generic selectors.
+ */
+export async function composerLocator(page: Page): Promise<Locator> {
+  const all = page.locator(SELECTORS.promptComposer)
+  const count = await all.count().catch(() => 0)
+  for (let i = 0; i < count; i++) {
+    const candidate = all.nth(i)
+    if (await candidate.isVisible().catch(() => false)) return candidate
+  }
+  return all.first()
 }
 
 export async function isComposerVisible(page: Page, timeoutMs = 15_000): Promise<boolean> {
-  try {
-    await composerLocator(page).waitFor({ state: "visible", timeout: timeoutMs })
-    return true
-  } catch {
-    return false
+  // Poll instead of waitFor: the composer element often mounts LATE
+  // (off-screen windows hydrate slowly), so the candidate set changes over
+  // time and a one-shot waitFor on the current locator can miss it.
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const composer = await composerLocator(page)
+    if (await composer.isVisible().catch(() => false)) return true
+    await page.waitForTimeout(1_000)
   }
+  return false
 }
 
 /** Assistant-message locator for the current UI variant. */
@@ -64,33 +79,155 @@ export interface SubmitOutcome {
   userBefore: number
 }
 
+export interface SubmitOptions {
+  /** Skip actionability checks and use DOM-level text insertion (required
+   * for off-screen windows where Playwright's input pipeline times out).
+   * Submission is still verified by outcome. */
+  force?: boolean
+}
+
+/** Composer selector usable inside page.evaluate. */
+const COMPOSER_DOM_SELECTOR =
+  '#prompt-textarea, [data-testid="prompt-textarea"], #mobile-composer-prompt, div[contenteditable="true"], textarea'
+
+/**
+ * Off-screen windows throttle Playwright's input pipeline (fill/typing time
+ * out), but DOM-level execCommand insertion works and fires proper input
+ * events (React picks it up and enables the send button).
+ * NOTE: the page may contain a hidden 0x0 textarea BEFORE the real
+ * contenteditable in document order — always pick the first VISIBLE match.
+ */
+async function domFill(page: Page, message: string): Promise<void> {
+  await page.evaluate(
+    ({ selector, text }) => {
+      const doc = globalThis as unknown as { document: any }
+      const all = doc.document.querySelectorAll(selector) as unknown as Array<any>
+      let el: any = null
+      for (const candidate of Array.from(all)) {
+        const r = candidate.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) {
+          el = candidate
+          break
+        }
+      }
+      if (!el) throw new Error("no visible composer element in DOM")
+      el.focus()
+      doc.document.execCommand("selectAll", false)
+      doc.document.execCommand("insertText", false, text)
+    },
+    { selector: COMPOSER_DOM_SELECTOR, text: message },
+  )
+}
+
+/** Composer content length via DOM (works for contenteditable off-screen). */
+async function composerContentLength(page: Page): Promise<number> {
+  return page
+    .evaluate((selector) => {
+      const doc = globalThis as unknown as { document: any }
+      const all = doc.document.querySelectorAll(selector) as unknown as Array<any>
+      let el: any = null
+      for (const candidate of Array.from(all)) {
+        const r = candidate.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) {
+          el = candidate
+          break
+        }
+      }
+      if (!el) return -1
+      return ((el as any).value ?? el.textContent ?? "").length
+    }, COMPOSER_DOM_SELECTOR)
+    .catch(() => -1)
+}
+
 /**
  * Submit a prompt and verify it actually appeared (assistant count grows or
  * URL becomes a conversation URL). Never retries when submission may have
  * gone through (duplicate-prompt protection).
  */
-export async function submitPrompt(page: Page, message: string, timeoutMs: number): Promise<SubmitOutcome> {
-  const composer = composerLocator(page)
-  if (!(await composer.isVisible())) {
+export async function submitPrompt(
+  page: Page,
+  message: string,
+  timeoutMs: number,
+  opts: SubmitOptions = {},
+): Promise<SubmitOutcome> {
+  const composer = await composerLocator(page)
+  if (!(await isComposerVisible(page, 45_000))) {
     throw new CodedError("Prompt composer not found on the page.", "BROWSER_COMPOSER_MISSING")
   }
   const beforeAssistant = await assistantCount(page)
   const beforeUrl = page.url()
 
-  await composer.click()
-  await composer.fill(message)
-
-  const sendButton = page.locator(SELECTORS.sendButton).first()
   let clicked = false
-  try {
-    await sendButton.waitFor({ state: "visible", timeout: 5_000 })
-    await sendButton.click({ timeout: 5_000 })
-    clicked = true
-  } catch {
-    clicked = false
-  }
-  if (!clicked) {
-    await composer.press("Enter")
+  if (opts.force === true) {
+    // Off-screen mode: DOM insertion (verified) + submit via Enter on the
+    // focused composer (force-clicks are unreliable without real rendering);
+    // send-button click only as backup. All failure modes stay fail-closed.
+    await page.waitForTimeout(2_000)
+    let inserted = false
+    for (let attempt = 1; attempt <= 6 && !inserted; attempt++) {
+      await composer.click({ force: true, timeout: 10_000 }).catch(() => {})
+      if (attempt % 2 === 1) {
+        await domFill(page, message).catch(() => {})
+      } else {
+        await page.keyboard.insertText(message).catch(() => {})
+      }
+      await page.waitForTimeout(1_500)
+      const len = await composerContentLength(page)
+      if (len > 0) inserted = true
+      else log.debug("composer insert attempt failed", { attempt, len })
+    }
+    if (!inserted) {
+      const len = await composerContentLength(page)
+      throw new CodedError(
+        `Could not insert the prompt text into the composer (len=${len}).`,
+        "BROWSER_SUBMIT_FAILED",
+      )
+    }
+
+    const evidenceAppeared = async (): Promise<boolean> => {
+      const assistantNow = await assistantCount(page)
+      if (assistantNow > beforeAssistant) return true
+      const urlNow = page.url()
+      return urlNow !== beforeUrl && /\/(?:c|uc)\//.test(urlNow)
+    }
+
+    // Primary: Enter on the focused composer.
+    await page.keyboard.press("Enter")
+    const evidenceDeadline = Date.now() + 25_000
+    while (Date.now() < evidenceDeadline) {
+      if (await evidenceAppeared()) return { beforeAssistant, afterAssistant: beforeAssistant + 1, userBefore: beforeAssistant }
+      await page.waitForTimeout(500)
+    }
+    // Backup: send-button force click.
+    try {
+      const sendButton = page.locator(SELECTORS.sendButton).first()
+      await sendButton.waitFor({ state: "visible", timeout: 3_000 })
+      const disabled = await sendButton.isDisabled().catch(() => true)
+      if (!disabled) {
+        await sendButton.click({ force: true, timeout: 8_000 })
+        clicked = true
+      }
+    } catch {
+      clicked = false
+    }
+    if (!clicked) {
+      await page.keyboard.press("Enter")
+    }
+  } else {
+    await composer.click({ timeout: 15_000 })
+    await composer.fill(message, { timeout: 30_000 })
+
+    const sendButton = page.locator(SELECTORS.sendButton).first()
+    try {
+      await sendButton.waitFor({ state: "visible", timeout: 5_000 })
+      await sendButton.click({ timeout: 5_000 })
+      clicked = true
+    } catch {
+      clicked = false
+    }
+    if (!clicked) {
+      await composer.press("Enter")
+    }
   }
 
   // Verify submission: assistant count grows OR URL becomes a conversation.

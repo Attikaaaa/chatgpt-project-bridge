@@ -91,6 +91,88 @@ export type ParseResult =
   | { ok: false; parseError: string }
 
 /**
+ * Deterministic lenient repair of model-emitted JSON:
+ * 1. Escape literal control characters inside string literals.
+ * 2. Escape unescaped quotes inside string literals. A `"` inside a string
+ *    is treated as CONTENT when the next non-whitespace character is not a
+ *    structural one (`,}]:` or another closing quote pattern); otherwise it
+ *    is the string terminator. Only used after strict parsing failed —
+ *    schema validation still runs afterwards, so a wrong repair fails
+ *    safely.
+ */
+function repairJsonString(json: string): string {
+  let out = ""
+  let inString = false
+  let escaped = false
+  const n = json.length
+  for (let i = 0; i < n; i++) {
+    const ch = json[i]
+    if (inString) {
+      if (escaped) {
+        out += ch
+        escaped = false
+        continue
+      }
+      if (ch === "\\") {
+        out += ch
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        // Lookahead: structural next char → terminator; else content quote.
+        let j = i + 1
+        while (j < n && /\s/.test(json[j] ?? "")) j++
+        const next = j < n ? (json[j] ?? "") : ""
+        if (next === "," || next === "}" || next === "]" || next === ":") {
+          inString = false
+          out += ch
+        } else {
+          out += '\\"'
+        }
+        continue
+      }
+      if (ch === "\n") {
+        out += "\\n"
+        continue
+      }
+      if (ch === "\r") {
+        out += "\\r"
+        continue
+      }
+      if (ch === "\t") {
+        out += "\\t"
+        continue
+      }
+      out += ch
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+    }
+    out += ch
+  }
+  return out
+}
+
+/**
+ * Parse the extracted JSON: strict first, then a deterministic lenient pass
+ * (control chars / unescaped quotes inside strings, trailing commas). Shape
+ * validation still applies afterwards.
+ */
+function parseJsonLenient(jsonStr: string): { ok: true; value: any } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: JSON.parse(jsonStr) }
+  } catch (strictError) {
+    try {
+      const repaired = repairJsonString(jsonStr).replace(/,\s*([}\]])/g, "$1")
+      return { ok: true, value: JSON.parse(repaired) }
+    } catch {
+      return { ok: false, error: (strictError as Error).message }
+    }
+  }
+}
+
+/**
  * Parse and validate a ChatGPT response into the transport protocol.
  * Throws nothing; returns a diagnostic on failure so the caller can decide
  * whether to attempt repair.
@@ -105,14 +187,12 @@ export function parseTransportResponse(
     return { ok: false, parseError: "No JSON object found in the response." }
   }
 
-  let parsedJson: unknown
-  try {
-    parsedJson = JSON.parse(jsonStr)
-  } catch (e) {
-    return { ok: false, parseError: `Response JSON is not parseable: ${(e as Error).message}` }
+  const parsedJson = parseJsonLenient(jsonStr)
+  if (!parsedJson.ok) {
+    return { ok: false, parseError: `Response JSON is not parseable: ${parsedJson.error}` }
   }
 
-  const shape = TransportResponseSchema.safeParse(parsedJson)
+  const shape = TransportResponseSchema.safeParse(parsedJson.value)
   if (!shape.success) {
     return { ok: false, parseError: `Response does not match the transport schema: ${shape.error.issues[0]?.message ?? "unknown"}` }
   }

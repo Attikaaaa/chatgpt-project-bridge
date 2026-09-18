@@ -486,7 +486,13 @@ async function cmdOpencodeConfig(): Promise<number> {
 
 async function cmdConfigSet(key: string, value: string): Promise<number> {
   const cfg = await loadConfig()
-  const parsed = ConfigSchema.safeParse({ ...cfg, [key]: key === "port" ? Number(value) : key === "headless" ? value === "true" : value })
+  const booleanKeys = new Set(["headless", "offscreen"])
+  const coerced = key === "port" || key === "responseTimeoutMs" || key === "navigationTimeoutMs" || key === "stabilityPolls"
+    ? Number(value)
+    : booleanKeys.has(key)
+      ? value === "true"
+      : value
+  const parsed = ConfigSchema.safeParse({ ...cfg, [key]: coerced })
   if (!parsed.success) {
     console.error(`Invalid config key or value: ${key}=${value}\nValid keys: ${Object.keys(ConfigSchema.shape).join(", ")}`)
     return 2

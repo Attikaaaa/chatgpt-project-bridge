@@ -104,6 +104,23 @@ repository. Different repositories can bind different Projects.
 cgpt serve            # binds 127.0.0.1:3210, generates token if missing
 ```
 
+### Invisible (background) mode
+
+By default the automation browser is a visible window. To run everything in
+the background with no windows popping up:
+
+```bash
+cgpt config set offscreen true    # invisible window (recommended; reliable)
+cgpt config set headless true     # fully hidden — ChatGPT's bot-protection
+                                  # usually refuses headless browsers, so
+                                  # offscreen is the dependable choice
+cgpt serve
+```
+
+Offscreen moves the browser window far off-screen while keeping a full
+headed-browser fingerprint. `cgpt login` always opens a visible window (you
+must interact with it once).
+
 ## Start OpenCode
 
 ```bash

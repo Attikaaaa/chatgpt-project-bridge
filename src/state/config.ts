@@ -13,6 +13,8 @@ export const ConfigSchema = z.object({
   browserChannel: z.string().optional(),
   /** Headless browser (NOT recommended: ChatGPT bot-protection may refuse). */
   headless: z.boolean().default(false),
+  /** Invisible browser: window moved off-screen (headed fingerprint, nothing visible). */
+  offscreen: z.boolean().default(false),
   /** Completion timeout for a single ChatGPT response, ms. */
   responseTimeoutMs: z.number().int().default(300_000),
   /** Navigation timeout, ms. */

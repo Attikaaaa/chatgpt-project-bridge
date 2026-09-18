@@ -32,6 +32,9 @@ export interface PlaywrightBackendOptions {
   navigationTimeoutMs?: number
   screenshotsDir?: string
   stabilityPolls?: number
+  /** Launch the window far off-screen: invisible to the user while keeping
+   * a full headed-browser fingerprint (fewer bot challenges than headless). */
+  offscreen?: boolean
 }
 
 const LOGIN_POLL_MS = 2_000
@@ -73,6 +76,9 @@ export class PlaywrightChatBackend implements ChatBackend {
       // Use the real keychain so the dedicated profile is interoperable.
       ignoreDefaultArgs: process.platform === "darwin" ? ["--use-mock-keychain"] : [],
     }
+    if (this.opts.offscreen && !launchOpts.headless) {
+      launchOpts.args = [...(launchOpts.args ?? []), "--window-position=-2000,-2000", "--window-size=1440,900"]
+    }
     if (discovered.executablePath) launchOpts.executablePath = discovered.executablePath
     else if (discovered.channel) launchOpts.channel = discovered.channel as never
     log.info("launching browser", {
@@ -97,14 +103,26 @@ export class PlaywrightChatBackend implements ChatBackend {
     })
   }
 
+  /** Hard-recover: force-close the browser; next op relaunches fresh. */
+  async recycle(): Promise<void> {
+    await this.close().catch(() => {})
+  }
+
   private async navigate(url: string): Promise<Page> {
     const page = await this.ensurePage()
     if (page.url() === url) return page // already there; avoid reload
+    const timeout = this.opts.navigationTimeoutMs ?? 60_000
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: this.opts.navigationTimeoutMs ?? 60_000 })
-    } catch (e) {
-      await this.screenshot(page, "navigation-failed")
-      throw new CodedError(`Navigation to ${url} failed: ${(e as Error).message}`, "BROWSER_NAVIGATION_FAILED")
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout })
+    } catch (firstError) {
+      // One conservative retry (no resubmission risk here: pure navigation).
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout })
+      } catch (e) {
+        await this.screenshot(page, "navigation-failed")
+        throw new CodedError(`Navigation to ${url} failed: ${(e as Error).message}`, "BROWSER_NAVIGATION_FAILED")
+      }
+      log.debug("navigation retried once", { url, first: (firstError as Error).message.slice(0, 80) })
     }
     return page
   }
@@ -147,7 +165,7 @@ export class PlaywrightChatBackend implements ChatBackend {
   async verifyAuth(): Promise<AuthStatus> {
     return this.queue.run(async () => {
       const page = await this.navigate(CHATGPT_URL)
-      const composer = await isComposerVisible(page, 20_000)
+      const composer = await isComposerVisible(page, 60_000)
       const loginCta = await this.hasLoginCta(page)
       if (composer && !loginCta) {
         return { authenticated: true, detail: "prompt composer visible, no login CTA" }
@@ -190,7 +208,7 @@ export class PlaywrightChatBackend implements ChatBackend {
     if (await this.hasLoginCta(page)) {
       return { ok: false, projectId: null, detail: "not authenticated; login call-to-action shown" }
     }
-    if (!(await isComposerVisible(page, 20_000))) {
+    if (!(await isComposerVisible(page, 60_000))) {
       await this.screenshot(page, "project-verify")
       return { ok: false, projectId: null, detail: "Project page loaded but prompt composer not found" }
     }
@@ -217,7 +235,7 @@ export class PlaywrightChatBackend implements ChatBackend {
     if (await this.hasLoginCta(page)) {
       return { ok: false, projectId: null, detail: "not authenticated" }
     }
-    if (!(await isComposerVisible(page, 20_000))) {
+    if (!(await isComposerVisible(page, 60_000))) {
       await this.screenshot(page, "resume-conversation")
       return { ok: false, projectId: null, detail: `conversation not reachable at ${page.url()}` }
     }
@@ -266,14 +284,14 @@ export class PlaywrightChatBackend implements ChatBackend {
       // Starting a chat from the project page creates a NEW conversation
       // inside the project.
       const page = await this.ensurePage()
-      if (!(await isComposerVisible(page, 20_000))) {
+      if (!(await isComposerVisible(page, 60_000))) {
         await this.screenshot(page, "create-conversation")
         throw new CodedError(
           `Could not open the bound Project (composer missing) at ${projectUrl}.`,
           "BROWSER_PROJECT_MISSING",
         )
       }
-      const submit = await submitPrompt(page, message, 30_000)
+      const submit = await submitPrompt(page, message, 30_000, { force: this.opts.offscreen === true })
       const completion = await awaitResponseCompletion(page, submit.beforeAssistant, timeoutMs, this.opts.stabilityPolls ?? 2)
       const conversationUrl = page.url()
       return {
@@ -298,7 +316,7 @@ export class PlaywrightChatBackend implements ChatBackend {
         )
       }
       const page = await this.ensurePage()
-      const submit = await submitPrompt(page, message, 30_000)
+      const submit = await submitPrompt(page, message, 30_000, { force: this.opts.offscreen === true })
       const completion = await awaitResponseCompletion(page, submit.beforeAssistant, timeoutMs, this.opts.stabilityPolls ?? 2)
       return { text: completion.text, conversationUrl: page.url() }
     })
@@ -309,7 +327,7 @@ export class PlaywrightChatBackend implements ChatBackend {
     return this.queue.run(async () => {
       const page = await this.ensurePage()
       try {
-        return await composerLocator(page).isVisible({ timeout: 5_000 })
+        return await (await composerLocator(page)).isVisible({ timeout: 5_000 })
       } catch {
         return false
       }

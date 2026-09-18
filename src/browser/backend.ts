@@ -60,6 +60,13 @@ export interface ChatBackend {
   runExclusive<T>(fn: () => Promise<T>): Promise<T>
   readonly queue: Mutex
   close(): Promise<void>
+  /**
+   * Hard-recover: force-close the browser so the next operation relaunches a
+   * fresh context. Used when a turn exceeds its hard deadline (renderer
+   * freezes in off-screen windows etc.). Optional: backends without
+   * background state can ignore it.
+   */
+  recycle?(): Promise<void>
 }
 
 export class CodedError extends Error {

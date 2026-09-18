@@ -315,6 +315,15 @@ export async function uninstallOpenCodeConfig(): Promise<InstallReport> {
     else cfg.agent = rest
     notes.push(`removed agent.${AGENT_ID}`)
   }
+  const buildAgent = agents && typeof agents.build === "object" ? (agents.build as Record<string, unknown>) : undefined
+  if (
+    buildAgent &&
+    JSON.stringify(buildAgent) === JSON.stringify({ mode: "primary", model: `${PROVIDER_ID}/${MODEL_ID}` })
+  ) {
+    delete (cfg.agent as Record<string, unknown>).build
+    if (Object.keys(cfg.agent as Record<string, unknown>).length === 0) delete cfg.agent
+    notes.push("removed agent.build (integration-created default-model override)")
+  }
   if (cfg.small_model === `${PROVIDER_ID}/${MODEL_ID}`) {
     delete cfg.small_model
     notes.push("removed small_model (was the bridge model)")

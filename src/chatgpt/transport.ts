@@ -13,6 +13,8 @@ Rules:
 - To use a tool, respond with exactly one JSON object of the form:
   {"type":"tool_calls","calls":[{"id":"call_1","name":"<tool name>","arguments":{ ... }}]}
   Use a distinct id for every call (e.g. call_1, call_2, ...).
+- JSON strings must be valid JSON: escape newlines inside strings as \\n
+  (never put raw line breaks inside a quoted string).
 - When you have enough information to answer the user, respond with exactly one JSON object:
   {"type":"final","content":"<final user-visible response>"}
 - During transport turns, output ONLY the JSON object. No markdown, no code fences, no prose before or after.

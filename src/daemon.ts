@@ -34,6 +34,7 @@ export async function serve(opts: ServeOptions = {}): Promise<{ close: () => Pro
 
   const backend: ChatBackend = new PlaywrightChatBackend({
     headless: opts.headless ?? cfg.headless,
+    offscreen: cfg.offscreen,
     executablePath: cfg.browserExecutable,
     channel: cfg.browserChannel,
     navigationTimeoutMs: cfg.navigationTimeoutMs,

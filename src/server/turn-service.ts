@@ -177,6 +177,30 @@ export class TurnService {
     private responseTimeoutMs = 300_000,
   ) {}
 
+  /**
+   * Hard deadline wrapper: a browser op must never hang forever (off-screen
+   * renderer freezes etc.). On timeout the backend is recycled (browser
+   * force-closed) so the next turn starts from a fresh context.
+   */
+  private async bounded<T>(label: string, op: () => Promise<T>): Promise<T> {
+    const hardMs = this.responseTimeoutMs + 120_000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        void this.backend.recycle?.().catch(() => {})
+        reject(new CgptError(
+          `Browser operation "${label}" exceeded its hard deadline (${Math.round(hardMs / 1000)}s). The browser was recycled; retry the request.`,
+          Codes.Browser,
+        ))
+      }, hardMs)
+    })
+    try {
+      return await Promise.race([op(), timeout])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
   private withSessionLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     let lock = this.sessionLocks.get(key)
     if (!lock) {
@@ -241,7 +265,7 @@ export class TurnService {
     if (isNew || needsResync) {
       const reason = isNew ? "new-session" : "history-divergence"
       log.info("starting new ChatGPT conversation", { reason, workspace: binding.dir, session: sessionId })
-      const auth = await this.backend.verifyAuth()
+      const auth = await this.bounded("verifyAuth", () => this.backend.verifyAuth())
       if (!auth.authenticated) {
         throw new CgptError(
           "ChatGPT browser profile is not authenticated.\n\nRun:\n  cgpt login",
@@ -260,7 +284,7 @@ export class TurnService {
         toolsChanged: true,
         systemChanged: true,
       })
-      const started = await this.backend.startConversation(binding.entry.projectUrl, composed, this.responseTimeoutMs)
+      const started = await this.bounded("startConversation", () => this.backend.startConversation(binding.entry.projectUrl, composed, this.responseTimeoutMs))
       const record = newSessionRecord({
         workspaceDir: binding.dir,
         sessionId,
@@ -300,12 +324,13 @@ export class TurnService {
 
     let sendResult
     try {
-      sendResult = await this.backend.continueConversation(
-        record.conversation.url,
-        binding.entry.projectUrl,
-        composed,
-        this.responseTimeoutMs,
-      )
+      sendResult = await this.bounded("continueConversation", () =>
+        this.backend.continueConversation(
+          record.conversation.url,
+          binding.entry.projectUrl,
+          composed,
+          this.responseTimeoutMs,
+        ))
     } catch (err) {
       if ((err as CodedError).code === CONVERSATION_UNRESUMABLE) {
         // §12: safely reconstruct a new conversation from current state.
@@ -326,7 +351,7 @@ export class TurnService {
           toolsChanged: true,
           systemChanged: true,
         })
-        const started = await this.backend.startConversation(binding.entry.projectUrl, composed2, this.responseTimeoutMs)
+        const started = await this.bounded("startConversation-resync", () => this.backend.startConversation(binding.entry.projectUrl, composed2, this.responseTimeoutMs))
         resetConversation(record, {
           url: started.result.conversationUrl,
           id: started.conversation.id,
@@ -356,12 +381,13 @@ export class TurnService {
     if (!parsed.ok) {
       log.warn("transport violation; attempting single repair", { error: parsed.parseError })
       const repairMsg = `${REPAIR_PROMPT}\n\n${RESPOND_NOW}`
-      finalSend = await this.backend.continueConversation(
-        record.conversation.url,
-        record.projectUrl,
-        repairMsg,
-        this.responseTimeoutMs,
-      )
+      finalSend = await this.bounded("continueConversation-repair", () =>
+        this.backend.continueConversation(
+          record.conversation.url,
+          record.projectUrl,
+          repairMsg,
+          this.responseTimeoutMs,
+        ))
       log.body("chatgpt repair response", { text: finalSend.text })
       parsed = parseTransportResponse(finalSend.text, manifest)
       if (!parsed.ok) {
