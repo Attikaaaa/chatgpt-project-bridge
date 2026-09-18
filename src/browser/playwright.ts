@@ -1,4 +1,5 @@
 import { chromium, type BrowserContext, type Page } from "playwright-core"
+import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type {
   AuthStatus,
@@ -62,6 +63,21 @@ export class PlaywrightChatBackend implements ChatBackend {
     if (this.context) return
     const profileDir = this.opts.profileDir ?? browserProfileDir()
     await ensureDir(profileDir)
+    // Mark the profile as cleanly exited so Brave does not session-restore
+    // stale pages (with dead drafts) after forced kills.
+    try {
+      const prefsPath = join(profileDir, "Default", "Preferences")
+      const prefsRaw = await readFile(prefsPath, "utf8").catch(() => "")
+      if (prefsRaw) {
+        const prefs = JSON.parse(prefsRaw)
+        const profile = (prefs.profile ??= {})
+        if (profile.exit_type !== "Normal") profile.exit_type = "Normal"
+        profile.exited_cleanly = true
+        await writeFile(prefsPath, JSON.stringify(prefs))
+      }
+    } catch {
+      /* best effort */
+    }
     const discovered = await discoverBrowser({
       browserExecutable: this.opts.executablePath,
       browserChannel: this.opts.channel,
@@ -77,7 +93,14 @@ export class PlaywrightChatBackend implements ChatBackend {
       ignoreDefaultArgs: process.platform === "darwin" ? ["--use-mock-keychain"] : [],
     }
     if (this.opts.offscreen && !launchOpts.headless) {
-      launchOpts.args = [...(launchOpts.args ?? []), "--window-position=-2000,-2000", "--window-size=1440,900"]
+      // Occlusion trackers make Chromium throttle off-screen windows' JS
+      // (slow hydration); disabling them keeps background pages snappy.
+      launchOpts.args = [
+        ...(launchOpts.args ?? []),
+        "--window-position=-2000,-2000",
+        "--window-size=1440,900",
+        "--disable-features=NativeWindowOcclusionTracker,OcclusionTracking",
+      ]
     }
     if (discovered.executablePath) launchOpts.executablePath = discovered.executablePath
     else if (discovered.channel) launchOpts.channel = discovered.channel as never
@@ -110,7 +133,10 @@ export class PlaywrightChatBackend implements ChatBackend {
 
   private async navigate(url: string): Promise<Page> {
     const page = await this.ensurePage()
-    if (page.url() === url) return page // already there; avoid reload
+    // ALWAYS navigate, even if the URL matches: a "matching" page can be a
+    // stale session-restored render with a dead JS context (after daemon/
+    // browser kills), which silently eats submissions. A fresh goto gives a
+    // live page. Note: goto on the same URL performs a reload.
     const timeout = this.opts.navigationTimeoutMs ?? 60_000
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout })
@@ -164,7 +190,16 @@ export class PlaywrightChatBackend implements ChatBackend {
 
   async verifyAuth(): Promise<AuthStatus> {
     return this.queue.run(async () => {
-      const page = await this.navigate(CHATGPT_URL)
+      const page = await this.ensurePage()
+      // Fast path: if the current page already shows a composer and no login
+      // CTA, the session is authenticated — skip the extra navigation.
+      if (page.url().includes("chatgpt.com")) {
+        const quickComposer = await isComposerVisible(page, 1_500)
+        if (quickComposer && !(await this.hasLoginCta(page))) {
+          return { authenticated: true, detail: "authenticated (current page)" }
+        }
+      }
+      await this.navigate(CHATGPT_URL)
       const composer = await isComposerVisible(page, 60_000)
       const loginCta = await this.hasLoginCta(page)
       if (composer && !loginCta) {
@@ -274,7 +309,9 @@ export class PlaywrightChatBackend implements ChatBackend {
     timeoutMs: number,
   ): Promise<{ conversation: Conversation; result: SendResult }> {
     return this.queue.run(async () => {
+      const t0 = Date.now()
       const verify = await this.verifyProjectOnPage(projectUrl)
+      log.debug("phase: project verified", { ms: Date.now() - t0 })
       if (!verify.ok) {
         throw new CodedError(
           `Configured ChatGPT Project could not be verified. No prompt was submitted. Detail: ${verify.detail}`,
@@ -291,8 +328,11 @@ export class PlaywrightChatBackend implements ChatBackend {
           "BROWSER_PROJECT_MISSING",
         )
       }
+      log.debug("phase: project open, submitting", { ms: Date.now() - t0 })
       const submit = await submitPrompt(page, message, 30_000, { force: this.opts.offscreen === true })
+      log.debug("phase: submitted", { ms: Date.now() - t0 })
       const completion = await awaitResponseCompletion(page, submit.beforeAssistant, timeoutMs, this.opts.stabilityPolls ?? 2)
+      log.debug("phase: response complete", { ms: Date.now() - t0 })
       const conversationUrl = page.url()
       return {
         conversation: { url: conversationUrl, id: conversationIdFromUrl(conversationUrl) },

@@ -20,6 +20,7 @@ export interface ServeOptions {
 export async function serve(opts: ServeOptions = {}): Promise<{ close: () => Promise<void>; port: number }> {
   const cfg = await loadConfig()
   if (opts.verboseBodies) log.verboseBodies = true
+  log.setLevel(cfg.logLevel)
   await ensureDir(logsDir())
   attachFileSink(logsDir() + "/cgpt.log")
 

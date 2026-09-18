@@ -119,7 +119,19 @@ cgpt serve
 
 Offscreen moves the browser window far off-screen while keeping a full
 headed-browser fingerprint. `cgpt login` always opens a visible window (you
-must interact with it once).
+must interact with once).
+
+**Speed trade-off**: macOS throttles rendering/JS of invisible windows, so
+offscreen turns are slower (simple answers ~40-90s; multi-tool tasks several
+minutes) and occasionally need a retry. For the fastest experience
+(visible browser window doing the work):
+
+```bash
+cgpt config set offscreen false
+```
+
+Fully `headless` mode is faster in theory but ChatGPT's bot-protection
+refuses it, so it is not a working option.
 
 ## Start OpenCode
 

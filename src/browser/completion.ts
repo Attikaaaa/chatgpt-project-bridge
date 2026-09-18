@@ -165,13 +165,25 @@ export async function submitPrompt(
     await page.waitForTimeout(2_000)
     let inserted = false
     for (let attempt = 1; attempt <= 6 && !inserted; attempt++) {
-      await composer.click({ force: true, timeout: 10_000 }).catch(() => {})
+      // NOTE: no Playwright click here — off-screen clicks each take seconds.
+      // domFill/insertText focus the element via JS instead.
       if (attempt % 2 === 1) {
         await domFill(page, message).catch(() => {})
       } else {
+        await page.evaluate((selector) => {
+          const doc = globalThis as unknown as { document: any }
+          const all = doc.document.querySelectorAll(selector) as unknown as Array<any>
+          for (const candidate of all) {
+            const r = candidate.getBoundingClientRect()
+            if (r.width > 0 && r.height > 0) {
+              candidate.focus()
+              break
+            }
+          }
+        }, COMPOSER_DOM_SELECTOR).catch(() => {})
         await page.keyboard.insertText(message).catch(() => {})
       }
-      await page.waitForTimeout(1_500)
+      await page.waitForTimeout(1_000)
       const len = await composerContentLength(page)
       if (len > 0) inserted = true
       else log.debug("composer insert attempt failed", { attempt, len })
@@ -184,26 +196,24 @@ export async function submitPrompt(
       )
     }
 
-    const evidenceAppeared = async (): Promise<boolean> => {
-      const assistantNow = await assistantCount(page)
-      if (assistantNow > beforeAssistant) return true
-      const urlNow = page.url()
-      return urlNow !== beforeUrl && /\/(?:c|uc)\//.test(urlNow)
-    }
 
-    // Primary: Enter on the focused composer.
-    await page.keyboard.press("Enter")
-    const evidenceDeadline = Date.now() + 25_000
-    while (Date.now() < evidenceDeadline) {
-      if (await evidenceAppeared()) return { beforeAssistant, afterAssistant: beforeAssistant + 1, userBefore: beforeAssistant }
-      await page.waitForTimeout(500)
-    }
-    // Backup: send-button force click.
+    // Primary: wait until React enables the send button (this also confirms
+    // the inserted text registered), then force-click it. Enter is only a
+    // last resort — CDP keyboard events do not submit reliably in off-screen
+    // windows.
+    const sendButton = page.locator(SELECTORS.sendButton).first()
     try {
-      const sendButton = page.locator(SELECTORS.sendButton).first()
-      await sendButton.waitFor({ state: "visible", timeout: 3_000 })
-      const disabled = await sendButton.isDisabled().catch(() => true)
-      if (!disabled) {
+      await sendButton.waitFor({ state: "visible", timeout: 8_000 })
+      let enabled = false
+      const enableDeadline = Date.now() + 10_000
+      while (Date.now() < enableDeadline) {
+        if (!(await sendButton.isDisabled().catch(() => true))) {
+          enabled = true
+          break
+        }
+        await page.waitForTimeout(400)
+      }
+      if (enabled) {
         await sendButton.click({ force: true, timeout: 8_000 })
         clicked = true
       }
