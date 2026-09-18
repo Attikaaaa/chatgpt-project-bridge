@@ -67,6 +67,11 @@ export class PlaywrightChatBackend implements ChatBackend {
       headless: this.opts.headless ?? false,
       viewport: { width: 1440, height: 900 },
       args: [],
+      // macOS: Playwright's default --use-mock-keychain makes Chromium
+      // encrypt cookies with a mock key, so sessions created in a normally
+      // launched browser (real Keychain) are unreadable here and vice versa.
+      // Use the real keychain so the dedicated profile is interoperable.
+      ignoreDefaultArgs: process.platform === "darwin" ? ["--use-mock-keychain"] : [],
     }
     if (discovered.executablePath) launchOpts.executablePath = discovered.executablePath
     else if (discovered.channel) launchOpts.channel = discovered.channel as never

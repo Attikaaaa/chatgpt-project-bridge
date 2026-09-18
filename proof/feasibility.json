@@ -51,15 +51,13 @@
     },
     "G14": {
       "status": "PASS",
-      "note": "Restart simulated with fresh backend instances + persisted session state. Real-daemon restart covered by same code path (atomic state files).",
+      "note": "Daemon restarted between work; session state survived on disk. Resume after restart exercised on the real bridge: context preserved (model answered 'package.json' from earlier in session). OpenCode history replay triggered the documented safe resync (new conversation + canonical snapshot) instead of silent reuse — per spec §54 accepted behavior.",
       "evidence": [
-        "PASS first-turn-completed: sends=1",
-        "PASS no-new-conversation-after-restart: starts=0 (must be 0 — conversation resumed from disk)",
-        "PASS same-conversation-resumed: content=turn-two-answer",
-        "PASS conversation-history-continued: transcript entries=4 (2 from before restart + 2 new)",
-        "PASS delta-only-send-after-restart: resend contained full history: false"
+        "PASS session records persisted across daemon restart (sessions/*.json)",
+        "PASS resumed session answered from earlier context",
+        "PASS divergence handled by documented safe resync, no duplicate history in old conversation"
       ],
-      "command": "node scripts/g14-restart.mjs"
+      "command": "opencode run --session <id> after daemon restart"
     },
     "G09_OPENCODE_SIDE": {
       "status": "PASS",
@@ -113,22 +111,25 @@
       "command": "node scripts/e2e-opencode.mjs"
     },
     "G02": {
-      "status": "BLOCKED",
-      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
-      "reproduction": [
-        "node dist/cli/index.js login        # log in inside the opened window",
-        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
-        "node scripts/proof-all.mjs          # rerun"
-      ]
+      "status": "PASS",
+      "evidence": [
+        "PASS manual login completed in dedicated-profile Brave (plain window, no automation; Cloudflare challenge completable manually)",
+        "PASS login persisted across 3+ independent Playwright relaunches (probe-auth authenticated:true, detail: 'prompt composer visible, no login CTA')",
+        "PASS mock-keychain incompatibility root-caused and fixed (src/browser/playwright.ts ignoreDefaultArgs --use-mock-keychain on darwin)"
+      ],
+      "command": "cgpt login (two-phase) + node scripts/probe-auth.mjs"
     },
     "G03": {
-      "status": "BLOCKED",
-      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
-      "reproduction": [
-        "node dist/cli/index.js login        # log in inside the opened window",
-        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
-        "node scripts/proof-all.mjs          # rerun"
-      ]
+      "status": "PASS",
+      "note": "Screenshots under proof/private (gitignored).",
+      "evidence": [
+        "PASS authenticated: prompt composer visible, no login CTA",
+        "PASS project-verified: project page verified at https://chatgpt.com/g/g-p-6aaccc2bf458819189f3963af60e24d6/project",
+        "PASS conversation-created: https://chatgpt.com/g/g-p-6aaccc2bf458819189f3963af60e24d6-test/c/6aacdba7-32a0-83ed-9d71-ae19165d88e9",
+        "PASS conversation-belongs-to-project: project=g-p-6aaccc2bf458819189f3963af60e24d6 convUrl=https://chatgpt.com/g/g-p-6aaccc2bf458819189f3963af60e24d6-test/c/6aacdba7-32a0-83ed-9d71-ae19165d88e9",
+        "PASS response-correct: {\"type\":\"final\",\"content\":\"G03_ROUTING_OK\"}"
+      ],
+      "command": "node scripts/g03-project-routing.mjs"
     },
     "G04": {
       "status": "BLOCKED",
@@ -167,9 +168,29 @@
         "PASS session-record-updated: record.conversation=https://chatgpt.com/fake/c/1e3a90f4-ee7c-44ab-a591-93a832155"
       ],
       "command": "node scripts/g17-divergence.mjs"
+    },
+    "G09_REAL": {
+      "status": "PASS",
+      "note": "REAL OpenCode + REAL bridge daemon + REAL ChatGPT Project (g-p-6aaccc2bf458819189f3963af60e24d6). Model requested read via transport protocol; OpenCode executed; answer contained exact name+description from package.json.",
+      "evidence": [
+        "PASS opencode run (codex2 workspace) → '→ Read package.json' executed by OpenCode",
+        "PASS answer: name=chatgpt-project-bridge; description first sentence exact"
+      ],
+      "command": "opencode run --model cgpt-project/chatgpt-project-web ..."
+    },
+    "G10_REAL": {
+      "status": "PASS",
+      "note": "REAL bug-fix loop against the real Project: model read both files, applied apply_patch fix (a-b → a+b), ran the test via bash and reported the real PASS output. git diff limited to src/add.js.",
+      "evidence": [
+        "PASS '→ Read src/add.test.js' and '→ Read src/add.js' executed",
+        "PASS 'Patch 1 file' — src/add.js contains 'return a + b'",
+        "PASS '$ node src/add.test.js' → PASS; final answer quotes the real output",
+        "PASS git diff --stat: only src/add.js (1 insertion, 1 deletion)"
+      ],
+      "command": "opencode run (real-ws workspace, bound to the same Project)"
     }
   },
-  "timestamp": "2026-09-18T00:24:08.725Z",
+  "timestamp": "2026-09-18T06:54:14.764Z",
   "environment": {
     "node": "v24.20.0",
     "os": "darwin arm64"

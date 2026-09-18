@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { serve } from "../daemon.js"
@@ -92,26 +92,82 @@ async function openBackendForCli(cfgAwait: ReturnType<typeof loadConfig>): Promi
 
 async function cmdLogin(argv: string[]): Promise<number> {
   const args = parseArgs(argv)
-  const timeoutMs = Number(args["timeout-ms"] ?? 600000)
-  const backend = await openBackendForCli(loadConfig())
+  const timeoutMs = Number(args["timeout-ms"] ?? 900000)
+  const cfg = await loadConfig()
+
+  // Phase 1: plain browser window (NO automation/CDP — Cloudflare treats it
+  // as a normal browser). The user logs in and CLOSES the window; the
+  // profile outlives the process.
+  console.log("Megnyílik egy Brave ablak (dedikált cgpt profil).")
+  console.log("Jelentkezz be a ChatGPT-be, majd ZÁRD BE az ablakot — a parancs folytatja magától.")
+  const discovered = await (async () => {
+    const { discoverBrowser } = await import("../browser/launch.js")
+    return discoverBrowser({ browserExecutable: cfg.browserExecutable, browserChannel: cfg.browserChannel })
+  })()
+  const { browserProfileDir } = await import("../state/paths.js")
+  const { ensureDir } = await import("../state/atomic-store.js")
+  const profileDir = browserProfileDir()
+  await ensureDir(profileDir)
+
+  const phaseDeadline = Date.now() + timeoutMs
+  void phaseDeadline
+  // Simpler + portable: use `open` on macOS, direct spawn elsewhere.
+  const url = "https://chatgpt.com/"
+  if (process.platform === "darwin") {
+    if (discovered.executablePath?.includes("Brave")) {
+      spawn("open", ["-na", "Brave Browser", "--args", `--user-data-dir=${profileDir}`, "--no-first-run", "--no-default-browser-check", url], { stdio: "ignore", detached: true })
+    } else if (discovered.executablePath) {
+      spawn(discovered.executablePath, [`--user-data-dir=${profileDir}`, "--no-first-run", "--no-default-browser-check", url], { stdio: "ignore", detached: true })
+    } else {
+      spawn("open", [url], { stdio: "ignore", detached: true })
+    }
+  } else if (discovered.executablePath) {
+    spawn(discovered.executablePath, [`--user-data-dir=${profileDir}`, "--no-first-run", "--no-default-browser-check", url], { stdio: "ignore", detached: true })
+  } else {
+    console.error("No browser executable found. Set cgpt config set browserExecutable <path>.")
+    return 1
+  }
+
+  // Wait for the user to close the browser window (process exit) OR for the
+  // deadline. Poll by watching for any process holding the profile.
+  let windowClosed = false
+  while (Date.now() < phaseDeadline) {
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      const out = spawnSync("pgrep", ["-f", `user-data-dir=${profileDir}`], { encoding: "utf8" })
+      if (out.status !== 0 || !out.stdout?.trim()) {
+        windowClosed = true
+        break
+      }
+    } catch {
+      windowClosed = true
+      break
+    }
+  }
+  if (!windowClosed) {
+    console.error("A bejelentkezési ablak nem zárult be a megadott időn belül.")
+    return 1
+  }
+  await new Promise((r) => setTimeout(r, 2000)) // cookie flush
+
+  // Phase 2: verify with Playwright, then prove persistence across restart.
+  const backend = await openBackendForCli(Promise.resolve(cfg))
   try {
-    console.log("Opening ChatGPT in a visible browser window (dedicated cgpt profile)…")
-    console.log("Log in manually in that window. cgpt will detect the login automatically.")
-    const status = await backend.waitForInteractiveLogin(timeoutMs)
+    const status = await backend.verifyAuth()
     if (!status.authenticated) {
-      console.error(`Login was not completed: ${status.detail}`)
+      console.error(`A bejelentkezés nem ellenőrizhető: ${status.detail}`)
       return 1
     }
-    console.log("Login detected. Verifying it persists across browser restart…")
+    console.log("Bejelentkezés észlelve. Ellenőrzöm, hogy újraindítás után is megmarad…")
     await backend.close()
-    const backend2 = await openBackendForCli(loadConfig())
+    const backend2 = await openBackendForCli(Promise.resolve(cfg))
     const verify = await backend2.verifyAuth()
     await backend2.close()
     if (!verify.authenticated) {
-      console.error(`Login did not persist across restart: ${verify.detail}`)
+      console.error(`A bejelentkezés nem maradt meg újraindítás után: ${verify.detail}`)
       return 1
     }
-    console.log("Persistent login verified.")
+    console.log("Perzisztens bejelentkezés ellenőrizve.")
     return 0
   } finally {
     await backend.close().catch(() => {})
