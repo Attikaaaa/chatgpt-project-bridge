@@ -11,3 +11,4 @@ test/fixtures/tmp/
 .playwright/
 coverage/
 tmp/
+test/fixtures/real-ws/
