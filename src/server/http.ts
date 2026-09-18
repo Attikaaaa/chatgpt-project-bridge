@@ -27,8 +27,12 @@ export interface ServerOptions {
 export async function buildServer(turns: TurnService, opts: ServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
-    requestTimeout: 600_000,
-    keepAliveTimeout: 65_000,
+    // ChatGPT turns are slow and serialized behind one browser; requests may
+    // legitimately wait a long time. Disable the request timeout and keep
+    // idle keep-alive sockets far longer than the worst turn so clients
+    // never hit "socket connection closed unexpectedly".
+    requestTimeout: 0,
+    keepAliveTimeout: 1_800_000,
   })
 
   const token = opts.token ?? (await loadToken())

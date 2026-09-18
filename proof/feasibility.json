@@ -132,31 +132,25 @@
       "command": "node scripts/g03-project-routing.mjs"
     },
     "G04": {
-      "status": "BLOCKED",
-      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
-      "reproduction": [
-        "node dist/cli/index.js login        # log in inside the opened window",
-        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
-        "node scripts/proof-all.mjs          # rerun"
-      ]
+      "status": "PASS",
+      "evidence": [
+        "PASS new conversation opened in the bound Project; model answered exactly PROJECT_INSTRUCTION_CANARY_9k2mx7 (value never included in the prompt)"
+      ],
+      "command": "node scripts/g04-g06-canaries.mjs --instruction-canary PROJECT_INSTRUCTION_CANARY_9k2mx7"
     },
     "G05": {
       "status": "BLOCKED",
-      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
-      "reproduction": [
-        "node dist/cli/index.js login        # log in inside the opened window",
-        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
-        "node scripts/proof-all.mjs          # rerun"
-      ]
+      "evidence": [
+        "FAIL file-canary: skipped: pass --file-canary <value> (add BRIDGE_CANARY.md to the Project first)"
+      ],
+      "command": "node scripts/g04-g06-canaries.mjs"
     },
     "G06": {
       "status": "BLOCKED",
-      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
-      "reproduction": [
-        "node dist/cli/index.js login        # log in inside the opened window",
-        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
-        "node scripts/proof-all.mjs          # rerun"
-      ]
+      "evidence": [
+        "FAIL memory-canary: skipped: pass --memory-canary <value> (store it in another Project chat first)"
+      ],
+      "command": "node scripts/g04-g06-canaries.mjs"
     },
     "G17": {
       "status": "PASS",
@@ -190,7 +184,7 @@
       "command": "opencode run (real-ws workspace, bound to the same Project)"
     }
   },
-  "timestamp": "2026-09-18T06:54:14.764Z",
+  "timestamp": "2026-09-18T07:15:04.272Z",
   "environment": {
     "node": "v24.20.0",
     "os": "darwin arm64"

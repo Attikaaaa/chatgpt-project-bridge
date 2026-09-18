@@ -254,6 +254,18 @@ function buildMergedConfig(
     ...agents,
     [AGENT_ID]: agentBlock(),
   }
+  // Zero-friction default: make the built-in "build" agent use the bridge
+  // model UNLESS the user already configured their own "build" agent.
+  if (!("build" in agents)) {
+    merged.agent = {
+      ...merged.agent as Record<string, unknown>,
+      build: {
+        mode: "primary",
+        model: `${PROVIDER_ID}/${MODEL_ID}`,
+      },
+    }
+    notes.push("built-in 'build' agent defaulted to the bridge model (override by defining agent.build yourself)")
+  }
   if (merged.small_model === undefined) {
     merged.small_model = `${PROVIDER_ID}/${MODEL_ID}`
     if (!skipSmallModelNote) {
