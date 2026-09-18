@@ -60,9 +60,60 @@
         "PASS delta-only-send-after-restart: resend contained full history: false"
       ],
       "command": "node scripts/g14-restart.mjs"
+    },
+    "G09_OPENCODE_SIDE": {
+      "status": "PASS",
+      "note": "Real OpenCode + real bridge daemon; ChatGPT side scripted (real-model protocol proof: G08_REAL_BROWSER)",
+      "evidence": [
+        "PASS G09-read-canary: canary=CANARY_A_e5f34358 found=true"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G10_OPENCODE_SIDE": {
+      "status": "PASS",
+      "note": "OpenCode applied the patch, ran the test, model saw PASS, diff limited",
+      "evidence": [
+        "PASS G10-source-actually-changed: add.js contains fix=true",
+        "PASS G10-test-output-seen-by-model: output mentions PASS=true",
+        "PASS G10-git-diff-limited: diff stat: src/add.js | 2 +- |  1 file changed, 1 insertion(+), 1 deletion(-) |"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G11_OPENCODE_SIDE": {
+      "status": "PASS",
+      "note": "fixture-b byte-identical during fixture-a runs",
+      "evidence": [
+        "PASS G11-fixture-b-unchanged: hash match=true"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G12_OPENCODE_SIDE": {
+      "status": "PASS",
+      "note": "Each OpenCode session mapped to its own conversation",
+      "evidence": [
+        "PASS G12-sessions-separate-conversations: records=4 distinctConversations=4"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G13_OPENCODE_SIDE": {
+      "status": "PASS",
+      "note": "fixture-a/b bound to different projects; routing by runtime dir",
+      "evidence": [
+        "PASS G13-workspaces-route-to-distinct-projects: A=https://chatgpt.com/fake/g-p-gate07 B=https://chatgpt.com/fake/g-p-projB"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G18": {
+      "status": "PASS",
+      "note": "cgpt-build agent external_directory=deny enforced by OpenCode (not the bridge)",
+      "evidence": [
+        "PASS G18-external-read-denied: fixture-b canary leaked=false",
+        "PASS G18-fixture-b-still-unchanged: hash match=true"
+      ],
+      "command": "node scripts/e2e-opencode.mjs"
     }
   },
-  "timestamp": "2026-09-17T23:26:21.140Z",
+  "timestamp": "2026-09-18T00:10:33.212Z",
   "environment": {
     "node": "v24.20.0",
     "npm": "11.19.0",

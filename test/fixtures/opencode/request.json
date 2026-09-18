@@ -1,0 +1,52 @@
+{
+  "$comment": "Sanitized fixture of REAL OpenCode 1.18.31 provider traffic captured via scripts/fake-daemon.mjs (CGPT_CAPTURE_PATH). Personal data removed: session id replaced, directory replaced. Tool list trimmed to the core coding tools for regression use; full capture had 38 tools.",
+  "capturedFrom": "opencode 1.18.31, @ai-sdk/openai-compatible",
+  "headerNames": [
+    "accept",
+    "authorization",
+    "content-type",
+    "host",
+    "user-agent",
+    "x-cgpt-directory",
+    "x-cgpt-session-id",
+    "x-cgpt-worktree"
+  ],
+  "metadataHeaders": {
+    "sessionId": "ses_<redacted>",
+    "directory": "/abs/path/to/workspace",
+    "worktree": "/abs/path/to/workspace"
+  },
+  "bodyShape": {
+    "model": "chatgpt-project-web",
+    "stream": true,
+    "messageCount": 2,
+    "roles": ["system", "user"],
+    "toolChoice": "auto",
+    "extraTopLevelKeys": []
+  },
+  "toolNames": [
+    "apply_patch",
+    "bash",
+    "glob",
+    "grep",
+    "read",
+    "task",
+    "todowrite",
+    "webfetch"
+  ],
+  "firstToolSample": {
+    "name": "apply_patch",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "patchText": {
+          "type": "string",
+          "description": "The full patch text that describes all changes to be made"
+        }
+      },
+      "required": ["patchText"]
+    }
+  },
+  "systemMessageSamplePrefix": "You are OpenCode, You and the user share the same workspace and collaborate to achieve the user's goals."
+}

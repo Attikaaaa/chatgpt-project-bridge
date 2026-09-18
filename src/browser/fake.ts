@@ -17,10 +17,15 @@ export interface FakeConversation {
 }
 
 export interface FakeScriptStep {
-  /** Match on the incoming message content; undefined = catch-all. */
-  match?: string | RegExp
+  /** Match on the incoming message content; string = substring,
+   * array = ALL must be substrings, RegExp = test. undefined = catch-all. */
+  match?: string | RegExp | Array<string | RegExp>
   /** Response text (a transport JSON object in normal use). */
   respond: string
+  /** If set, respond with a final whose content is the first regex match
+   * (string = regex source) in the incoming message — models the model
+   * faithfully reporting tool output. */
+  echoFrom?: string | RegExp
 }
 
 /**
@@ -51,6 +56,11 @@ export class FakeChatBackend implements ChatBackend {
     const step = this.script[this.scriptIndex]
     if (step && (step.match === undefined || matches(message, step.match))) {
       this.scriptIndex = Math.min(this.scriptIndex + 1, this.script.length - 1)
+      if (step.echoFrom) {
+        const re = typeof step.echoFrom === "string" ? new RegExp(step.echoFrom) : step.echoFrom
+        const m = message.match(re)
+        return JSON.stringify({ type: "final", content: m ? m[0] : "(echo target not found)" })
+      }
       return step.respond
     }
     const last = this.script[this.script.length - 1]
@@ -157,8 +167,11 @@ export class FakeChatBackend implements ChatBackend {
   }
 }
 
-function matches(message: string, m: string | RegExp): boolean {
-  return typeof m === "string" ? message.includes(m) : m.test(message)
+function matches(message: string, m: string | RegExp | Array<string | RegExp>): boolean {
+  if (Array.isArray(m)) return m.every((p) => matches(message, p))
+  if (typeof m === "string") return message.includes(m)
+  if (m instanceof RegExp) return m.test(message)
+  return false
 }
 
 function projectIdFromUrl(url: string): string | null {

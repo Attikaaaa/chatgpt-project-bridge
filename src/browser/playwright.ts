@@ -105,14 +105,27 @@ export class PlaywrightChatBackend implements ChatBackend {
   }
 
   private async hasLoginCta(page: Page): Promise<boolean> {
-    try {
-      return await page
-        .locator(`${LOGIN_SIGNALS.loginLink}, ${LOGIN_SIGNALS.loginButton}`)
-        .first()
-        .isVisible({ timeout: 2_000 })
-    } catch {
-      return false
+    // Check several candidates and ALL matches — .first() can be a hidden
+    // element, which previously caused a false "authenticated" verdict.
+    const candidates = [
+      LOGIN_SIGNALS.loginLink,
+      LOGIN_SIGNALS.loginButton,
+      'button:has-text("Log in")',
+      'a:has-text("Log in")',
+      '[data-testid="login-button"]',
+    ]
+    for (const sel of candidates) {
+      try {
+        const matches = page.locator(sel)
+        const n = await matches.count()
+        for (let i = 0; i < Math.min(n, 8); i++) {
+          if (await matches.nth(i).isVisible({ timeout: 250 })) return true
+        }
+      } catch {
+        /* selector not present */
+      }
     }
+    return false
   }
 
   async health(): Promise<{ ok: boolean; detail: string }> {

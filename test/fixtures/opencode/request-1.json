@@ -1,0 +1,92 @@
+{
+  "capturedAt": "2026-09-17T23:33:37.602Z",
+  "url": "/v1/chat/completions",
+  "headerNames": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "connection",
+    "content-length",
+    "content-type",
+    "host",
+    "user-agent",
+    "x-cgpt-directory",
+    "x-cgpt-session-id",
+    "x-cgpt-worktree",
+    "x-session-affinity",
+    "x-session-id"
+  ],
+  "hasAuthorization": true,
+  "metadataHeaders": {
+    "sessionId": "ses_f4e48318cffeDHAUfsvinZw14k",
+    "directory": "/Users/ati/Desktop/ai projektek/codex2/test/fixtures/e2e-workspaces/fixture-capture",
+    "worktree": "/Users/ati/Desktop/ai projektek/codex2/test/fixtures/e2e-workspaces/fixture-capture"
+  },
+  "bodyShape": {
+    "model": "chatgpt-project-web",
+    "stream": true,
+    "messageCount": 2,
+    "roles": [
+      "system",
+      "user"
+    ],
+    "toolNames": [
+      "apply_patch",
+      "bash",
+      "glob",
+      "grep",
+      "read",
+      "roblox-studio_character_navigation",
+      "roblox-studio_execute_luau",
+      "roblox-studio_generate_material",
+      "roblox-studio_generate_mesh",
+      "roblox-studio_generate_procedural_model",
+      "roblox-studio_generate_texture",
+      "roblox-studio_get_console_output",
+      "roblox-studio_get_studio_state",
+      "roblox-studio_http_get",
+      "roblox-studio_insert_asset",
+      "roblox-studio_inspect_instance",
+      "roblox-studio_list_roblox_studios",
+      "roblox-studio_multi_edit",
+      "roblox-studio_screen_capture",
+      "roblox-studio_script_grep",
+      "roblox-studio_script_read",
+      "roblox-studio_script_search",
+      "roblox-studio_search_asset",
+      "roblox-studio_search_game_tree",
+      "roblox-studio_segment_mesh",
+      "roblox-studio_skill",
+      "roblox-studio_start_stop_play",
+      "roblox-studio_store_image",
+      "roblox-studio_subagent",
+      "roblox-studio_upload_image",
+      "roblox-studio_user_keyboard_input",
+      "roblox-studio_user_mouse_input",
+      "roblox-studio_wait_job_finished",
+      "skill",
+      "task",
+      "todowrite",
+      "webfetch"
+    ],
+    "toolChoice": "auto",
+    "extraTopLevelKeys": []
+  },
+  "firstToolSample": {
+    "name": "apply_patch",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "patchText": {
+          "type": "string",
+          "description": "The full patch text that describes all changes to be made"
+        }
+      },
+      "required": [
+        "patchText"
+      ]
+    }
+  },
+  "firstMessageContentSample": "You are OpenCode, You and the user share the same workspace and collaborate to achieve the user's goals.\n\nYou are a deeply pragmatic, effective software engineer. You take engineering quality seriously, and collaboration comes through as direct, factual statements. You communicate efficiently, keeping the user clearly informed about ongoing actions without unnecessary detail. You build context by "
+}

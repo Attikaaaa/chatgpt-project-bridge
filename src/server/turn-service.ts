@@ -1,5 +1,6 @@
 import { CgptError, Codes } from "../util/errors.js"
 import { log } from "../util/log.js"
+import { Mutex } from "../util/mutex.js"
 import { CONVERSATION_UNRESUMABLE, type ChatBackend, type CodedError } from "../browser/backend.js"
 import type { ToolManifestEntry } from "../chatgpt/protocol.js"
 import { parseTransportResponse, protocolFailure } from "../chatgpt/protocol.js"
@@ -166,10 +167,24 @@ function renderDelta(
 }
 
 export class TurnService {
+  /** Per-session locks: same-session requests are fully serialized so the
+   * session-record check-then-act cannot race. Lock order is always
+   * session → backend queue, so no deadlock is possible. */
+  private sessionLocks = new Map<string, Mutex>()
+
   constructor(
     private backend: ChatBackend,
     private responseTimeoutMs = 300_000,
   ) {}
+
+  private withSessionLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    let lock = this.sessionLocks.get(key)
+    if (!lock) {
+      lock = new Mutex()
+      this.sessionLocks.set(key, lock)
+    }
+    return lock.run(fn)
+  }
 
   /**
    * Handle one OpenAI chat-completions request end-to-end.
@@ -192,9 +207,19 @@ export class TurnService {
       )
     }
 
-    // 2. Session key.
+    // 2. Session key — everything below is serialized per session.
     const sessionId = meta.sessionId ?? `oneshot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const key = sessionKey(binding.dir, sessionId)
+    return this.withSessionLock(key, () => this.handleLocked(input, meta, binding, sessionId, key))
+  }
+
+  private async handleLocked(
+    input: TurnInput,
+    meta: RequestMetadata,
+    binding: { dir: string; entry: { projectUrl: string } },
+    sessionId: string,
+    key: string,
+  ): Promise<TurnOutput> {
     const existing = await loadSession(key)
     const isNew = existing === null
 
