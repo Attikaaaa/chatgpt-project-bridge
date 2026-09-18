@@ -38,6 +38,7 @@ for (const [name, cmd] of gates) {
   const lines = r.out.split("\n").filter((l) => /^(PASS|FAIL) /.test(l))
   summary.push({ name, code: r.code, checks: lines })
   console.log(`${r.code === 0 ? "PASS" : "FAIL"} ${name} (${cmd[0]})`)
+  if (r.code !== 0) console.log(r.out.split("\n").slice(-25).join("\n"))
 }
 
 // auth-gated gates

@@ -190,6 +190,22 @@ cgpt sessions          # stored (workspace, session) → conversation mappings
 cgpt browser-profile   # path of the dedicated browser profile
 ```
 
+## Canary gates (optional, active)
+
+These prove Project-context delivery by submitting real prompts. They
+temporarily modify YOUR Project (you prepare the canaries manually) and are
+therefore opt-in:
+
+1. `G04` — put `PROJECT_INSTRUCTION_CANARY_<random>` in the Project
+   instructions, then:
+   `node scripts/g04-g06-canaries.mjs --instruction-canary PROJECT_INSTRUCTION_CANARY_<random>`
+2. `G05` — add `BRIDGE_CANARY.md` containing `PROJECT_FILE_CANARY_<random>`
+   to the Project files, then pass `--file-canary <value>`
+3. `G06` — in another chat of the same Project, tell ChatGPT:
+   "Memory canary: <value>. Remember this." then pass `--memory-canary <value>`
+   (outcome depends on ChatGPT Project memory settings; the observation is
+   recorded honestly, never fabricated).
+
 ## Known limitations
 
 - **Serialized browser access**: one interactive profile → ChatGPT requests

@@ -257,6 +257,31 @@ describe("TurnService with FakeChatBackend", () => {
     expect(secondSend).toContain("I already answered in a different model.")
   })
 
+  it("tool manifest change mid-session: re-sends the updated manifest", async () => {
+    const backend = new FakeChatBackend([
+      { respond: '{"type":"final","content":"with-old-tools"}' },
+      { respond: '{"type":"final","content":"with-new-tools"}' },
+    ])
+    const svc = new TurnService(backend)
+    await setBinding(workDir, PROJECT)
+
+    const toolA = { type: "function" as const, function: { name: "tool_a", parameters: { type: "object" } } }
+    const toolB = { type: "function" as const, function: { name: "tool_b", parameters: { type: "object" } } }
+    await svc.handle(
+      { model: "chatgpt-project-web", messages: [{ role: "system", content: "sys" }, { role: "user", content: "hi" }], tools: [toolA] },
+      meta(workDir, "sess-tools"),
+    )
+    await svc.handle(
+      { model: "chatgpt-project-web", messages: [{ role: "system", content: "sys" }, { role: "user", content: "hi" }, { role: "user", content: "again" }], tools: [toolB] },
+      meta(workDir, "sess-tools"),
+    )
+    const secondSend = backend.sends[1].message
+    expect(secondSend).toContain("tool_b") // new manifest sent
+    expect(secondSend).not.toContain("tool_a") // old manifest replaced
+    expect(secondSend).toContain("again")
+    // unchanged tools are NOT re-sent (covered by the second-turn delta test above)
+  })
+
   it("resumed session with deleted conversation resyncs safely", async () => {
     const backend = new FakeChatBackend([
       { respond: '{"type":"final","content":"first"}' },

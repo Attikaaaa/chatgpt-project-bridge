@@ -84,7 +84,8 @@ record(
   `content=${out.response.choices[0].message.content}`,
 )
 // stored session record now points at the new conversation
-const recordKey = sessionKey(workDir, "g17-session")
+const { canonicalWorkspace } = await import("../dist/state/workspaces.js")
+const recordKey = sessionKey(await canonicalWorkspace(workDir), "g17-session")
 const rec = await loadSession(recordKey)
 record(
   "session-record-updated",

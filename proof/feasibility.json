@@ -65,7 +65,7 @@
       "status": "PASS",
       "note": "Real OpenCode + real bridge daemon; ChatGPT side scripted (real-model protocol proof: G08_REAL_BROWSER)",
       "evidence": [
-        "PASS G09-read-canary: canary=CANARY_A_e5f34358 found=true"
+        "PASS G09-read-canary: canary=CANARY_A_a8fb3f50 found=true"
       ],
       "command": "node scripts/e2e-opencode.mjs"
     },
@@ -111,16 +111,68 @@
         "PASS G18-fixture-b-still-unchanged: hash match=true"
       ],
       "command": "node scripts/e2e-opencode.mjs"
+    },
+    "G02": {
+      "status": "BLOCKED",
+      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
+      "reproduction": [
+        "node dist/cli/index.js login        # log in inside the opened window",
+        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
+        "node scripts/proof-all.mjs          # rerun"
+      ]
+    },
+    "G03": {
+      "status": "BLOCKED",
+      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
+      "reproduction": [
+        "node dist/cli/index.js login        # log in inside the opened window",
+        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
+        "node scripts/proof-all.mjs          # rerun"
+      ]
+    },
+    "G04": {
+      "status": "BLOCKED",
+      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
+      "reproduction": [
+        "node dist/cli/index.js login        # log in inside the opened window",
+        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
+        "node scripts/proof-all.mjs          # rerun"
+      ]
+    },
+    "G05": {
+      "status": "BLOCKED",
+      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
+      "reproduction": [
+        "node dist/cli/index.js login        # log in inside the opened window",
+        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
+        "node scripts/proof-all.mjs          # rerun"
+      ]
+    },
+    "G06": {
+      "status": "BLOCKED",
+      "note": "Requires an authenticated ChatGPT browser profile (and a bound Project for G03–G06).",
+      "reproduction": [
+        "node dist/cli/index.js login        # log in inside the opened window",
+        "cd /path/to/your/repo && node dist/cli/index.js bind <project-url>",
+        "node scripts/proof-all.mjs          # rerun"
+      ]
+    },
+    "G17": {
+      "status": "PASS",
+      "evidence": [
+        "PASS divergence-creates-new-conversation: starts=2",
+        "PASS resync-snapshot-is-canonical: You are serving as the reasoning component of an OpenCode coding session.  The local filesystem and shell are NOT direct",
+        "PASS no-duplicate-full-history-in-old-conversation: old conversation messages before=2 after=2",
+        "PASS mapping-replaced: content=post-resync done",
+        "PASS session-record-updated: record.conversation=https://chatgpt.com/fake/c/1e3a90f4-ee7c-44ab-a591-93a832155"
+      ],
+      "command": "node scripts/g17-divergence.mjs"
     }
   },
-  "timestamp": "2026-09-18T00:10:33.212Z",
+  "timestamp": "2026-09-18T00:24:08.725Z",
   "environment": {
     "node": "v24.20.0",
-    "npm": "11.19.0",
-    "opencode": "1.18.31",
-    "git": "git version 2.55.0",
-    "os": "darwin arm64",
-    "browser": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    "os": "darwin arm64"
   },
-  "overall": "PASS"
+  "overall": "PARTIAL"
 }
